@@ -6,12 +6,10 @@
 
 A lightweight compatibility proxy that exposes an **Anthropic Messages API** backed by **Google Antigravity Cloud Code**, letting you use Claude and Gemini models seamlessly in **Claude Code CLI**, **Claude Desktop (Cowork & Chat)**, and **OpenClaw / ClawdBot**.
 
-![Antigravity Claude Proxy Banner](images/banner.png)
-
-> **⚠️ WARNING:** Google may flag or suspend accounts connected to unauthorized reverse-engineered proxies. Use a dedicated burner or secondary account.
+> **WARNING:** Google may flag or suspend accounts connected to unauthorized reverse-engineered proxies. Use a dedicated burner or secondary account.
 
 <details>
-<summary><strong>⚠️ Terms of Service Notice — Read Before Using</strong></summary>
+<summary><strong>Terms of Service Notice — Read Before Using</strong></summary>
 
 > [!CAUTION]
 > Using this proxy may violate Google's Terms of Service. A small number of users have reported their Google accounts being suspended or restricted.
