@@ -326,16 +326,7 @@ This project builds upon insights and foundations from:
 
 ## Fork Information & Added Features
 
-This repository is forked from [badrisnarayanan/antigravity-claude-proxy](https://github.com/badrisnarayanan/antigravity-claude-proxy).
-
-### Key Additions & Enhancements:
-- **Claude Code CLI Optimization & Artifact Fix**: Filtered out unsupported `Artifact` tool calls that trigger `claude.ai login` errors in Claude Code CLI.
-- **Gemini Flash Reasoning (`claude-haiku-5-5`)**: Added Anthropic-compatible Haiku aliases routing directly to `gemini-3.8-flash-high`, enabling zero-warning execution in Claude Code CLI.
-- **Per-Account Request Mutex (`AccountMutex`)**: Implemented FIFO request queuing per account to serialize upstream calls and prevent HTTP 429 `RESOURCE_EXHAUSTED` concurrency collisions on Google Cloud Code.
-- **Production Endpoint Priority**: Updated fallback endpoints to prioritize `cloudcode-pa.googleapis.com` (production) over canary/staging endpoints.
-- **Model Regex Truncation Fix**: Fixed model name regex parsing in error handlers to prevent dotted model IDs (like `gemini-3.8-flash-high`) from being truncated to `gemini-3`.
-- **Stream Lifecycle Cleanup**: Added client socket close detection (`req.on('close')`) to safely cancel generators and immediately release account locks upon disconnection.
-- **Automated Test Coverage**: Added dedicated test suites for the account mutex (`tests/test-account-mutex.cjs`) and updated model routing/usage test suites.
+This repository is forked from [badrisnarayanan/antigravity-claude-proxy](https://github.com/badrisnarayanan/antigravity-claude-proxy). Many changes are made to original repo and are out of scope for the original project.
 
 ---
 
