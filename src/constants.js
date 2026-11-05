@@ -315,11 +315,13 @@ export const MODEL_FALLBACK_MAP = {
 export const BUILTIN_MODEL_MAPPINGS = {
     'claude-3-5-sonnet-20241022': 'claude-sonnet-4-6',
     'claude-3-7-sonnet-20250219': 'claude-sonnet-4-6',
-    'claude-3-5-haiku-20241022': 'gemini-3.8-flash-low',
-    'claude-3-haiku-20240307': 'gemini-3.8-flash-low',
+    'claude-3-5-haiku-20241022': 'gemini-3.8-flash-high',
+    'claude-3-5-haiku': 'gemini-3.8-flash-high',
+    'claude-haiku-4-5-20251001': 'gemini-3.8-flash-high',
+    'claude-haiku-5-5': 'gemini-3.8-flash-high',
+    'claude-3-haiku-20240307': 'gemini-3.8-flash-high',
     'claude-opus-5-5': 'claude-opus-4-6-thinking',
     'claude-sonnet-5-5': 'claude-sonnet-4-6',
-    'claude-haiku-5-5': 'claude-sonnet-4-6',
     'claude-opus-5': 'claude-opus-4-6-thinking',
     'claude-sonnet-5': 'claude-sonnet-4-6',
     'claude-opus-4-6': 'claude-opus-4-6-thinking',
@@ -338,6 +340,19 @@ export const TEST_MODELS = {
 // Default Claude CLI presets (used by WebUI settings)
 export const DEFAULT_PRESETS = [
     {
+        name: 'Gemini Flash Fast',
+        config: {
+            ANTHROPIC_AUTH_TOKEN: 'test',
+            ANTHROPIC_BASE_URL: 'http://localhost:8080',
+            ANTHROPIC_MODEL: 'gemini-3.8-flash-high',
+            ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-4-6-thinking',
+            ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-4-6',
+            ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gemini-3.8-flash-high',
+            CLAUDE_CODE_SUBAGENT_MODEL: 'gemini-3.8-flash-high',
+            ENABLE_EXPERIMENTAL_MCP_CLI: 'true'
+        }
+    },
+    {
         name: 'Claude Thinking',
         config: {
             ANTHROPIC_AUTH_TOKEN: 'test',
@@ -345,7 +360,7 @@ export const DEFAULT_PRESETS = [
             ANTHROPIC_MODEL: 'claude-opus-4-6-thinking',
             ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-4-6-thinking',
             ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-4-6',
-            ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-sonnet-4-6',
+            ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gemini-3.8-flash-high',
             CLAUDE_CODE_SUBAGENT_MODEL: 'claude-sonnet-4-6',
             ENABLE_EXPERIMENTAL_MCP_CLI: 'true'
         }
@@ -355,11 +370,11 @@ export const DEFAULT_PRESETS = [
         config: {
             ANTHROPIC_AUTH_TOKEN: 'test',
             ANTHROPIC_BASE_URL: 'http://localhost:8080',
-            ANTHROPIC_MODEL: 'gemini-3.1-pro-low',
-            ANTHROPIC_DEFAULT_OPUS_MODEL: 'gemini-3.1-pro-low',
-            ANTHROPIC_DEFAULT_SONNET_MODEL: 'gemini-3.5-flash-low',
-            ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gemini-3.5-flash-low',
-            CLAUDE_CODE_SUBAGENT_MODEL: 'gemini-3.5-flash-low',
+            ANTHROPIC_MODEL: 'gemini-3.8-flash-high',
+            ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-4-6-thinking',
+            ANTHROPIC_DEFAULT_SONNET_MODEL: 'gemini-3.8-flash-high',
+            ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gemini-3.8-flash-high',
+            CLAUDE_CODE_SUBAGENT_MODEL: 'gemini-3.8-flash-high',
             ENABLE_EXPERIMENTAL_MCP_CLI: 'true'
         }
     }

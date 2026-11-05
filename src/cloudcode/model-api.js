@@ -63,6 +63,19 @@ function isDisabledPlaceholder(modelId) {
 }
 
 /**
+ * Map model ID to an Anthropic family tier (opus, sonnet, haiku)
+ * Required by Claude Desktop to display third-party/gateway models.
+ * @param {string} modelId
+ * @returns {'opus' | 'sonnet' | 'haiku'}
+ */
+function getAnthropicFamilyTier(modelId) {
+    const lower = (modelId || '').toLowerCase();
+    if (lower.includes('opus')) return 'opus';
+    if (lower.includes('flash') || lower.includes('haiku') || lower.includes('lite')) return 'haiku';
+    return 'sonnet';
+}
+
+/**
  * List available models in Anthropic API format
  * Fetches models dynamically from the Cloud Code API
  *
@@ -95,9 +108,46 @@ export async function listModels(token) {
             created_at: new Date().toISOString(),
             owned_by: 'anthropic',
             display_name: modelData.displayName || modelId,
-            name: modelId,
-            description: modelData.displayName || modelId
+            name: modelData.displayName || modelId,
+            description: modelData.displayName || modelId,
+            anthropic_family_tier: getAnthropicFamilyTier(modelId),
+            max_effort_level: 'high'
         }));
+
+    // Inject Anthropic-compatible Haiku aliases for Gemini Flash.
+    // Claude Desktop uses an internal vendor blocklist that hides non-Anthropic model IDs (like "gemini-*").
+    // Adding these aliases allows Claude Desktop's UI to expose and route to Gemini Flash cleanly.
+    const hasFlash = supportedEntries.some(([id]) => id.includes('flash'));
+    if (hasFlash) {
+        modelList.push({
+            id: 'claude-3-5-haiku-20241022',
+            object: 'model',
+            type: 'model',
+            created: Math.floor(Date.now() / 1000),
+            created_at: new Date().toISOString(),
+            owned_by: 'anthropic',
+            display_name: 'Gemini 3.8 Flash (Haiku)',
+            name: 'Gemini 3.8 Flash (Haiku)',
+            description: 'Gemini 3.8 Flash high-performance reasoning model',
+            anthropic_family_tier: 'haiku',
+            max_effort_level: 'high'
+        });
+        modelList.push({
+            id: 'claude-haiku-4-5-20251001',
+            object: 'model',
+            type: 'model',
+            created: Math.floor(Date.now() / 1000),
+            created_at: new Date().toISOString(),
+            owned_by: 'anthropic',
+            display_name: 'Gemini 3.8 Flash (Haiku 4.5)',
+            name: 'Gemini 3.8 Flash (Haiku 4.5)',
+            description: 'Gemini 3.8 Flash high-performance reasoning model',
+            anthropic_family_tier: 'haiku',
+            max_effort_level: 'high'
+        });
+        modelCache.validModels.add('claude-3-5-haiku-20241022');
+        modelCache.validModels.add('claude-haiku-4-5-20251001');
+    }
 
     return {
         object: 'list',
@@ -340,6 +390,10 @@ async function populateModelCache(token, projectId = null) {
                 recordModels(data);
                 const validIds = Object.keys(data.models).filter(modelId => isSupportedModel(modelId));
                 modelCache.validModels = new Set(validIds);
+                if (validIds.some(id => id.includes('flash'))) {
+                    modelCache.validModels.add('claude-3-5-haiku-20241022');
+                    modelCache.validModels.add('claude-haiku-4-5-20251001');
+                }
                 modelCache.lastFetched = Date.now();
                 logger.debug(`[CloudCode] Model cache populated with ${validIds.length} models`);
             }

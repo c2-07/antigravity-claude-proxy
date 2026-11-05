@@ -362,6 +362,53 @@ function claude-agy {
 
 ---
 
+## Using with Claude Desktop (Cowork & Chat)
+
+Claude Desktop supports connecting to a custom LLM Gateway (like `antigravity-claude-proxy`).
+
+### How to Use Gemini Flash in Claude Desktop
+
+1. **Start or Restart the Proxy Server**:
+   ```bash
+   npm start
+   ```
+   The proxy automatically detects your official Antigravity CLI credentials (`~/.gemini/antigravity-cli/antigravity-oauth-token`) and serves `/v1/models` on `http://127.0.0.1:8080`.
+
+2. **Select the Model in Claude Desktop**:
+   In Claude Desktop (under Cowork or Chat mode with Gateway connected):
+   - Click the model selector at the bottom right of the message box.
+   - Select **Gemini 3.8 Flash (Haiku)** (or **Gemini 3.8 Flash (Haiku 4.5)**).
+   - Your prompts will now be processed directly by Google Antigravity's **Gemini 3.8 Flash (High)** model with full multimodal and reasoning support!
+
+> **Technical Note on Claude Desktop Filtering**:
+> Reverse engineering `/Applications/Claude.app/Contents/Resources/app.asar` reveals that Claude Desktop enforces an internal regex filter (`XTe`) on Gateway routes that drops any model ID containing third-party vendor strings (including `gemini`, `gpt`, `llama`, etc.), accepting only Anthropic tier identifiers (`opus`, `sonnet`, `haiku`).
+>
+> To ensure seamless compatibility, `antigravity-claude-proxy` provides Anthropic-compliant Haiku aliases (`claude-3-5-haiku-20241022` and `claude-haiku-4-5-20251001` with `anthropic_family_tier: "haiku"` and display name `Gemini 3.8 Flash (Haiku)`) which automatically route upstream to `gemini-3.8-flash-high`.
+
+### How to Use Gemini Flash in Claude Code CLI
+
+In Claude Code CLI, there is no vendor filter, so you can reference Gemini Flash directly or via the Haiku alias:
+
+```bash
+# Direct model ID
+CLAUDE_CONFIG_DIR=~/.claude-antigravity \
+ANTHROPIC_BASE_URL="http://127.0.0.1:8080" \
+ANTHROPIC_AUTH_TOKEN="test" \
+ANTHROPIC_MODEL="gemini-3.8-flash-high" \
+claude
+
+# Or via Haiku alias
+CLAUDE_CONFIG_DIR=~/.claude-antigravity \
+ANTHROPIC_BASE_URL="http://127.0.0.1:8080" \
+ANTHROPIC_AUTH_TOKEN="test" \
+ANTHROPIC_MODEL="claude-3-5-haiku-20241022" \
+claude
+```
+
+---
+
+---
+
 ### Running as a System Service (systemd)
 
 When running as a systemd service, the proxy runs under a different user (e.g. `root`), so it can't find your Claude CLI settings at `~/.claude/settings.json`. Set `CLAUDE_CONFIG_PATH` to point to the real user's `.claude` directory:
