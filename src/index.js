@@ -7,7 +7,7 @@
 import './utils/proxy.js';
 
 import app, { accountManager } from './server.js';
-import { DEFAULT_PORT } from './constants.js';
+import { DEFAULT_PORT, DEFAULT_HOST } from './constants.js';
 import { logger } from './utils/logger.js';
 import { config } from './config.js';
 import { getStrategyLabel, STRATEGY_NAMES, DEFAULT_STRATEGY } from './account-manager/strategies/index.js';
@@ -54,7 +54,7 @@ if (isFallbackEnabled) {
 export const FALLBACK_ENABLED = isFallbackEnabled;
 
 const PORT = process.env.PORT || DEFAULT_PORT;
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || DEFAULT_HOST || '127.0.0.1';
 
 if (process.env.HOST) {
     logger.info(`[Startup] Using HOST environment variable: ${process.env.HOST}`);

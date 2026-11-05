@@ -15,7 +15,7 @@ const registry = new Map();
 /**
  * Map a Cloud Code apiProvider value to a model family.
  * @param {string} apiProvider - e.g. 'API_PROVIDER_GOOGLE_GEMINI'
- * @returns {'claude' | 'gemini' | null}
+ * @returns {'claude' | 'gemini' | 'gpt' | null}
  */
 function familyFromProvider(apiProvider) {
     const provider = String(apiProvider || '').toUpperCase();

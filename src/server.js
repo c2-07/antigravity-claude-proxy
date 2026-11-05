@@ -79,8 +79,16 @@ async function ensureInitialized() {
 app.use(cors());
 app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
 
-// API Key authentication middleware for /v1/* endpoints
-app.use('/v1', (req, res, next) => {
+// URL normalization middleware (handles double /v1/v1/ prefixes from some clients/SDKs)
+app.use((req, res, next) => {
+    if (req.url.startsWith('/v1/v1/')) {
+        req.url = req.url.replace('/v1/v1/', '/v1/');
+    }
+    next();
+});
+
+// API Key authentication middleware for API endpoints
+const apiAuthMiddleware = (req, res, next) => {
     // Skip validation if apiKey is not configured
     if (!config.apiKey) {
         return next();
@@ -108,10 +116,19 @@ app.use('/v1', (req, res, next) => {
     }
 
     next();
-});
+};
+
+app.use(['/v1', '/messages', '/models'], apiAuthMiddleware);
 
 // Setup usage statistics middleware
 usageStats.setupMiddleware(app);
+
+/**
+ * Health/connectivity endpoint for Claude Desktop and health checkers
+ */
+app.all(['/api/hello', '/v1/api/hello'], (req, res) => {
+    res.status(200).json({ status: 'ok' });
+});
 
 /**
  * Silent handler for Claude Code CLI root POST requests
@@ -651,9 +668,10 @@ app.post('/refresh-token', async (req, res) => {
 });
 
 /**
- * List models endpoint (OpenAI-compatible format)
+ * List models endpoint (OpenAI and Anthropic compatible formats)
+ * GET /models, GET /v1/models
  */
-app.get('/v1/models', async (req, res) => {
+app.get(['/models', '/v1/models'], async (req, res) => {
     try {
         await ensureInitialized();
         const { account } = accountManager.selectAccount();
@@ -682,29 +700,75 @@ app.get('/v1/models', async (req, res) => {
 });
 
 /**
- * Count tokens endpoint - Anthropic Messages API compatible
- * Uses local tokenization with official tokenizers (@anthropic-ai/tokenizer for Claude, @lenml/tokenizer-gemini for Gemini)
+ * Estimate token count for Anthropic count_tokens API
  */
-app.post('/v1/messages/count_tokens', (req, res) => {
-    res.status(501).json({
-        type: 'error',
-        error: {
-            type: 'not_implemented',
-            message: 'Token counting is not implemented. Use /v1/messages with max_tokens or configure your client to skip token counting.'
+function estimateTokenCount(body) {
+    if (!body) return 1;
+    let totalChars = 0;
+
+    // System prompt
+    if (typeof body.system === 'string') {
+        totalChars += body.system.length;
+    } else if (Array.isArray(body.system)) {
+        for (const item of body.system) {
+            totalChars += (item?.text || JSON.stringify(item) || '').length;
         }
-    });
+    }
+
+    // Messages
+    if (Array.isArray(body.messages)) {
+        for (const msg of body.messages) {
+            if (typeof msg.content === 'string') {
+                totalChars += msg.content.length;
+            } else if (Array.isArray(msg.content)) {
+                for (const part of msg.content) {
+                    if (part.type === 'text' && part.text) {
+                        totalChars += part.text.length;
+                    } else if (part.type === 'thinking' && part.thinking) {
+                        totalChars += part.thinking.length;
+                    } else if (part.type === 'tool_use' || part.type === 'tool_result') {
+                        totalChars += JSON.stringify(part).length;
+                    } else if (part.type === 'image') {
+                        totalChars += 400; // Standard image token estimate
+                    }
+                }
+            }
+        }
+    }
+
+    // Tools definitions
+    if (Array.isArray(body.tools)) {
+        totalChars += JSON.stringify(body.tools).length;
+    }
+
+    // Standard Anthropic ratio: ~3.8 chars per token, minimum 1 token
+    return Math.max(1, Math.ceil(totalChars / 3.8));
+}
+
+/**
+ * Count tokens endpoint - Anthropic Messages API compatible
+ * POST /models/count_tokens, POST /v1/messages/count_tokens
+ */
+app.post(['/messages/count_tokens', '/v1/messages/count_tokens'], (req, res) => {
+    try {
+        const inputTokens = estimateTokenCount(req.body);
+        res.json({ input_tokens: inputTokens });
+    } catch (err) {
+        res.status(400).json({
+            type: 'error',
+            error: {
+                type: 'invalid_request_error',
+                message: err.message
+            }
+        });
+    }
 });
 
 /**
  * Main messages endpoint - Anthropic Messages API compatible
+ * POST /messages, POST /v1/messages
  */
-
-
-/**
- * Anthropic-compatible Messages API
- * POST /v1/messages
- */
-app.post('/v1/messages', async (req, res) => {
+app.post(['/messages', '/v1/messages'], async (req, res) => {
     try {
         // Ensure account manager is initialized
         await ensureInitialized();

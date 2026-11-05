@@ -70,10 +70,10 @@ export class AccountManager {
         this.#settings = settings;
         this.#currentIndex = activeIndex;
 
-        // If config exists but has no accounts, fall back to Antigravity database
+        // If config exists but has no accounts, fall back to Antigravity CLI token or database
         if (this.#accounts.length === 0) {
-            logger.warn('[AccountManager] No accounts in config. Falling back to Antigravity database');
-            const { accounts: defaultAccounts, tokenCache } = loadDefaultAccount();
+            logger.info('[AccountManager] No accounts in config. Checking official Antigravity CLI credentials / database...');
+            const { accounts: defaultAccounts, tokenCache } = await loadDefaultAccount();
             this.#accounts = defaultAccounts;
             this.#tokenCache = tokenCache;
         }

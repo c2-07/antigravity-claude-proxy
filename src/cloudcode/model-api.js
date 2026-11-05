@@ -90,8 +90,12 @@ export async function listModels(token) {
         .map(([modelId, modelData]) => ({
             id: modelId,
             object: 'model',
+            type: 'model',
             created: Math.floor(Date.now() / 1000),
+            created_at: new Date().toISOString(),
             owned_by: 'anthropic',
+            display_name: modelData.displayName || modelId,
+            name: modelId,
             description: modelData.displayName || modelId
         }));
 

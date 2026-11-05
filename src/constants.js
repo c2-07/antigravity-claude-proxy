@@ -29,6 +29,19 @@ function getAntigravityDbPath() {
 }
 
 /**
+ * Get candidate paths for the official Antigravity CLI OAuth token file.
+ * @returns {string[]} List of candidate file paths
+ */
+export function getCliTokenPaths() {
+    const home = homedir();
+    return [
+        join(home, '.gemini/antigravity-cli/antigravity-oauth-token'),
+        join(home, '.gemini/antigravity/antigravity-oauth-token')
+    ];
+}
+export const CLI_TOKEN_PATHS = getCliTokenPaths();
+
+/**
  * Generate platform-specific User-Agent string.
  * @returns {string} User-Agent in format "antigravity/hub/version os/arch"
  */
@@ -89,14 +102,17 @@ export const CLIENT_METADATA = {
 };
 
 // Cloud Code API endpoints (in fallback order)
-const ANTIGRAVITY_ENDPOINT_DAILY = 'https://daily-cloudcode-pa.googleapis.com';
-const ANTIGRAVITY_ENDPOINT_PROD = 'https://cloudcode-pa.googleapis.com';
+const CUSTOM_ENDPOINT = process.env.TEST_UPSTREAM_URL || process.env.CLOUDCODE_ENDPOINT || null;
+const ANTIGRAVITY_ENDPOINT_DAILY = CUSTOM_ENDPOINT || 'https://daily-cloudcode-pa.googleapis.com';
+const ANTIGRAVITY_ENDPOINT_PROD = CUSTOM_ENDPOINT || 'https://cloudcode-pa.googleapis.com';
 
 // Endpoint fallback order (daily → prod)
-export const ANTIGRAVITY_ENDPOINT_FALLBACKS = [
-    ANTIGRAVITY_ENDPOINT_DAILY,
-    ANTIGRAVITY_ENDPOINT_PROD
-];
+export const ANTIGRAVITY_ENDPOINT_FALLBACKS = CUSTOM_ENDPOINT
+    ? [CUSTOM_ENDPOINT]
+    : [
+        ANTIGRAVITY_ENDPOINT_DAILY,
+        ANTIGRAVITY_ENDPOINT_PROD
+    ];
 
 // Required headers for Antigravity API requests
 // Headers for general Antigravity API requests
@@ -111,10 +127,12 @@ export const ANTIGRAVITY_HEADERS = {
 
 // Endpoint order for loadCodeAssist (prod first)
 // loadCodeAssist works better on prod for fresh/unprovisioned accounts
-export const LOAD_CODE_ASSIST_ENDPOINTS = [
-    ANTIGRAVITY_ENDPOINT_PROD,
-    ANTIGRAVITY_ENDPOINT_DAILY
-];
+export const LOAD_CODE_ASSIST_ENDPOINTS = CUSTOM_ENDPOINT
+    ? [CUSTOM_ENDPOINT]
+    : [
+        ANTIGRAVITY_ENDPOINT_PROD,
+        ANTIGRAVITY_ENDPOINT_DAILY
+    ];
 
 // Endpoint order for onboardUser (same as generateContent fallbacks)
 export const ONBOARD_USER_ENDPOINTS = ANTIGRAVITY_ENDPOINT_FALLBACKS;
@@ -124,13 +142,14 @@ export const ONBOARD_USER_ENDPOINTS = ANTIGRAVITY_ENDPOINT_FALLBACKS;
 export const LOAD_CODE_ASSIST_HEADERS = ANTIGRAVITY_HEADERS;
 
 // Default project ID if none can be discovered
-export const DEFAULT_PROJECT_ID = 'rising-fact-p41fc';
+export const DEFAULT_PROJECT_ID = 'aicode-consumers';
 
 // Configurable constants - values from config.json take precedence
 export const TOKEN_REFRESH_INTERVAL_MS = config?.tokenCacheTtlMs || (5 * 60 * 1000); // From config or 5 minutes
 export const REQUEST_BODY_LIMIT = config?.requestBodyLimit || '50mb';
 export const ANTIGRAVITY_AUTH_PORT = 9092;
 export const DEFAULT_PORT = config?.port || 8080;
+export const DEFAULT_HOST = config?.host || '127.0.0.1';
 
 // Multi-account configuration
 export const ACCOUNT_CONFIG_PATH = config?.accountConfigPath || join(
@@ -220,7 +239,7 @@ export const MODEL_VALIDATION_CACHE_TTL_MS = 5 * 60 * 1000;
  * Get the model family from model name (dynamic detection, no hardcoded list).
  * Ids without a family in their name resolve via backend metadata (model-registry.js).
  * @param {string} modelName - The model name from the request
- * @returns {'claude' | 'gemini' | 'unknown'} The model family
+ * @returns {'claude' | 'gemini' | 'gpt' | 'unknown'} The model family
  */
 export function getModelFamily(modelName) {
     const lower = (modelName || '').toLowerCase();
@@ -237,16 +256,18 @@ export function getModelFamily(modelName) {
  */
 export function isThinkingModel(modelName) {
     const lower = (modelName || '').toLowerCase();
-    // Claude thinking models have "thinking" in the name
-    if (lower.includes('claude') && lower.includes('thinking')) return true;
+    // Claude thinking models have "thinking" in the name or are 4.6 thinking variants
+    if (lower.includes('claude') && (lower.includes('thinking') || lower.includes('sonnet-4-6') || lower.includes('opus-4-6'))) return true;
     // Gemini thinking models: explicit "thinking" in name, OR gemini version 3+
     if (lower.includes('gemini')) {
         if (lower.includes('thinking')) return true;
+        if (lower.includes('3.8-flash-high') || lower.includes('3.8-flash-medium')) return true;
         // Check for gemini-3 or higher (e.g., gemini-3, gemini-3.5, gemini-4, etc.)
         const versionMatch = lower.match(/gemini-(\d+)/);
         if (versionMatch && parseInt(versionMatch[1], 10) >= 3) return true;
         return false;
     }
+    if (lower.includes('gpt')) return false;
     if (lower.includes('claude')) return false;
     // Codename ids: trust the backend's supportsThinking flag
     return getRegisteredModel(modelName)?.supportsThinking === true;
@@ -294,11 +315,18 @@ export const MODEL_FALLBACK_MAP = {
 export const BUILTIN_MODEL_MAPPINGS = {
     'claude-3-5-sonnet-20241022': 'claude-sonnet-4-6',
     'claude-3-7-sonnet-20250219': 'claude-sonnet-4-6',
+    'claude-3-5-haiku-20241022': 'gemini-3.8-flash-low',
+    'claude-3-haiku-20240307': 'gemini-3.8-flash-low',
     'claude-opus-5-5': 'claude-opus-4-6-thinking',
     'claude-sonnet-5-5': 'claude-sonnet-4-6',
     'claude-haiku-5-5': 'claude-sonnet-4-6',
     'claude-opus-5': 'claude-opus-4-6-thinking',
-    'claude-sonnet-5': 'claude-sonnet-4-6'
+    'claude-sonnet-5': 'claude-sonnet-4-6',
+    'claude-opus-4-6': 'claude-opus-4-6-thinking',
+    'claude-sonnet-4-6-thinking': 'claude-sonnet-4-6',
+    'gemini-3.8-flash': 'gemini-3.8-flash-high',
+    'gemini-flash': 'gemini-3.8-flash-high',
+    'gemini-pro': 'gemini-2.5-pro'
 };
 
 // Default test models for each family (used by test suite)

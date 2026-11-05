@@ -4,11 +4,12 @@
  * Handles loading and saving account configuration to disk.
  */
 
-import { readFile, writeFile, mkdir, access, rename } from 'fs/promises';
+import { readFile, writeFile, mkdir, access, rename, chmod } from 'fs/promises';
 import { constants as fsConstants } from 'fs';
 import { dirname } from 'path';
 import { ACCOUNT_CONFIG_PATH } from '../constants.js';
 import { getAuthStatus } from '../auth/database.js';
+import { extractCliToken } from '../auth/token-extractor.js';
 import { logger } from '../utils/logger.js';
 
 let writeLock = null;
@@ -67,12 +68,41 @@ export async function loadAccounts(configPath = ACCOUNT_CONFIG_PATH) {
 }
 
 /**
- * Load the default account from Antigravity's database
+ * Load the default account from Antigravity's official CLI token file or SQLite database
  *
- * @param {string} dbPath - Optional path to the database
- * @returns {{accounts: Array, tokenCache: Map}}
+ * @param {string} [dbPath] - Optional path to the database
+ * @returns {Promise<{accounts: Array, tokenCache: Map}>}
  */
-export function loadDefaultAccount(dbPath) {
+export async function loadDefaultAccount(dbPath) {
+    // 1. Try extracting token from official Antigravity CLI token file first
+    try {
+        const cliAuth = await extractCliToken();
+        if (cliAuth?.apiKey) {
+            const account = {
+                email: cliAuth.email || 'cli@antigravity',
+                source: 'cli-token',
+                tokenPath: cliAuth.tokenPath,
+                refreshToken: cliAuth.refreshToken,
+                lastUsed: null,
+                modelRateLimits: {},
+                subscription: { tier: 'pro', projectId: 'aicode-consumers', detectedAt: Date.now() },
+                projectId: 'aicode-consumers'
+            };
+
+            const tokenCache = new Map();
+            tokenCache.set(account.email, {
+                token: cliAuth.apiKey,
+                extractedAt: Date.now()
+            });
+
+            logger.info(`[AccountManager] Loaded default account from official CLI token: ${account.email}`);
+            return { accounts: [account], tokenCache };
+        }
+    } catch (cliErr) {
+        logger.debug('[AccountManager] CLI token extraction skipped/failed:', cliErr.message);
+    }
+
+    // 2. Fall back to local SQLite database if available
     try {
         const authData = getAuthStatus(dbPath);
         if (authData?.apiKey) {
@@ -89,12 +119,12 @@ export function loadDefaultAccount(dbPath) {
                 extractedAt: Date.now()
             });
 
-            logger.info(`[AccountManager] Loaded default account: ${account.email}`);
+            logger.info(`[AccountManager] Loaded default account from database: ${account.email}`);
 
             return { accounts: [account], tokenCache };
         }
     } catch (error) {
-        logger.error('[AccountManager] Failed to load default account:', error.message);
+        logger.error('[AccountManager] Failed to load default account from database:', error.message);
     }
 
     return { accounts: [], tokenCache: new Map() };
@@ -130,7 +160,8 @@ export async function saveAccounts(configPath, accounts, settings, activeIndex) 
                 source: acc.source,
                 enabled: acc.enabled !== false,
                 dbPath: acc.dbPath || null,
-                refreshToken: acc.source === 'oauth' ? acc.refreshToken : undefined,
+                tokenPath: acc.tokenPath || undefined,
+                refreshToken: (acc.source === 'oauth' || acc.source === 'cli-token') ? acc.refreshToken : undefined,
                 apiKey: acc.source === 'manual' ? acc.apiKey : undefined,
                 projectId: acc.projectId || undefined,
                 addedAt: acc.addedAt || undefined,
@@ -153,10 +184,15 @@ export async function saveAccounts(configPath, accounts, settings, activeIndex) 
         // Validate JSON before writing (prevent saving corrupt data)
         JSON.parse(json);
 
-        // Atomic write: write to temp file then rename
+        // Atomic write with restrictive permissions (0600) to protect credentials
         const tmpPath = configPath + '.tmp';
-        await writeFile(tmpPath, json);
+        await writeFile(tmpPath, json, { mode: 0o600 });
         await rename(tmpPath, configPath);
+        try {
+            await chmod(configPath, 0o600);
+        } catch {
+            // chmod might fail on some platforms/filesystems; non-fatal
+        }
     } catch (error) {
         logger.error('[AccountManager] Failed to save config:', error.message);
     } finally {

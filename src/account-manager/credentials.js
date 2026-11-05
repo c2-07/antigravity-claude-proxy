@@ -13,6 +13,7 @@ import {
     DEFAULT_PROJECT_ID
 } from '../constants.js';
 import { refreshAccessToken, parseRefreshParts, formatRefreshParts } from '../auth/oauth.js';
+import { extractCliToken } from '../auth/token-extractor.js';
 import { getAuthStatus } from '../auth/database.js';
 import { logger } from '../utils/logger.js';
 import { isNetworkError, throttledFetch } from '../utils/helpers.js';
@@ -74,7 +75,35 @@ export async function getTokenForAccount(account, tokenCache, onInvalid, onSave)
     // Get fresh token based on source
     let token;
 
-    if (account.source === 'oauth' && account.refreshToken) {
+    if (account.source === 'cli-token') {
+        try {
+            const cliAuth = await extractCliToken({
+                paths: account.tokenPath ? [account.tokenPath] : undefined
+            });
+            if (cliAuth?.apiKey) {
+                token = cliAuth.apiKey;
+            } else if (account.refreshToken) {
+                const refreshed = await refreshAccessToken(account.refreshToken);
+                token = refreshed.accessToken;
+            } else {
+                throw new Error('No access token available from CLI token file');
+            }
+            if (account.isInvalid) {
+                account.isInvalid = false;
+                account.invalidReason = null;
+                if (onSave) await onSave();
+            }
+            logger.debug(`[AccountManager] Obtained token from CLI for: ${account.email}`);
+        } catch (error) {
+            if (isNetworkError(error)) {
+                logger.warn(`[AccountManager] Failed to refresh CLI token for ${account.email} due to network error: ${error.message}`);
+                throw new Error(`AUTH_NETWORK_ERROR: ${error.message}`);
+            }
+            logger.error(`[AccountManager] Failed to get CLI token for ${account.email}:`, error.message);
+            if (onInvalid) onInvalid(account.email, error.message);
+            throw new Error(`AUTH_INVALID: ${account.email}: ${error.message}`);
+        }
+    } else if (account.source === 'oauth' && account.refreshToken) {
         // OAuth account - use refresh token to get new access token
         try {
             const tokens = await refreshAccessToken(account.refreshToken);
@@ -155,6 +184,13 @@ export async function getProjectForAccount(account, token, projectCache, onSave 
             await fetchAndSaveSubscription(token, account, onSave);
         }
         return account.projectId;
+    }
+
+    // CLI tokens default to DEFAULT_PROJECT_ID ('aicode-consumers')
+    if (account.source === 'cli-token') {
+        account.projectId = DEFAULT_PROJECT_ID;
+        projectCache.set(account.email, DEFAULT_PROJECT_ID);
+        return DEFAULT_PROJECT_ID;
     }
 
     // Discover managed project, passing projectId for metadata.duetProject

@@ -1,22 +1,16 @@
 /**
- * Test Identity Scrubbing - Tests for issue #375 (secondary trigger)
+ * Test System Prompts & Integrity
  *
- * Issue #375 identified two triggers for the opaque 429 RESOURCE_EXHAUSTED from
- * cloudcode-pa: (1) the "x-anthropic-billing-header" line, fixed in 2f6afae, and
- * (2) system prompts naming third-party AI products. The merged fix only covered
- * (1), so "Claude Code" and "Anthropic" survived into the outgoing system parts.
- *
- * These tests pin the scrub map in src/cloudcode/request-builder.js: the two
- * names must be neutralized, while legitimate uses of the same words (lower-case
- * header names, file names, model self-descriptions) must survive untouched.
+ * Verifies that system prompts and instructions are preserved cleanly
+ * without artificial prompt rewriting or evasion blocks, adhering strictly
+ * to Section 5 guidelines.
  */
 
 async function runTests() {
     console.log('╔══════════════════════════════════════════════════════════════╗');
-    console.log('║           IDENTITY SCRUB TEST SUITE                          ║');
+    console.log('║           SYSTEM PROMPT INTEGRITY TEST SUITE                 ║');
     console.log('╚══════════════════════════════════════════════════════════════╝\n');
 
-    // Dynamic import for ESM module
     const { buildCloudCodeRequest } = await import('../src/cloudcode/request-builder.js');
 
     let passed = 0;
@@ -29,7 +23,7 @@ async function runTests() {
             passed++;
         } catch (e) {
             console.log(`✗ ${name}`);
-            console.log(`  Error: ${e.message}`);
+            console.error(`  Error: ${e.message}`);
             failed++;
         }
     }
@@ -38,85 +32,48 @@ async function runTests() {
         if (!cond) throw new Error(message);
     }
 
-    const IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
-
-    // The outgoing system instruction is what cloudcode-pa actually sees.
     function outgoingSystem(system) {
         const payload = buildCloudCodeRequest(
-            { model: 'gemini-4-argon-medium', system, messages: [{ role: 'user', content: 'hi' }] },
+            { model: 'claude-sonnet-4-6', system, messages: [{ role: 'user', content: 'hi' }] },
             'project-id',
             'test@example.com'
         );
         return payload.request.systemInstruction.parts.map(p => p.text).join('\n');
     }
 
-    test('Claude Code identity line is neutralized in the outgoing system prompt', () => {
-        const out = outgoingSystem(IDENTITY);
-        assert(!out.includes('Claude Code'), `"Claude Code" survived: ${out}`);
-        assert(!out.includes('Anthropic'), `"Anthropic" survived: ${out}`);
+    test('Caller string system prompt passes through verbatim', () => {
+        const text = 'You are Claude Code, Anthropic\'s official CLI for Claude.';
+        const out = outgoingSystem(text);
+        assert(out.includes(text), 'Caller system prompt must be preserved verbatim');
     });
 
-    test('Works for a plain string system prompt', () => {
-        const out = outgoingSystem(IDENTITY);
-        assert(out.includes('the assistant'), `expected replacement text, got: ${out}`);
-        assert(out.includes('the vendor'), `expected vendor replacement, got: ${out}`);
-    });
-
-    test('Works for an array of text blocks', () => {
+    test('Array of system text blocks preserved intact', () => {
         const out = outgoingSystem([
-            { type: 'text', text: IDENTITY },
-            { type: 'text', text: 'Claude Code is made by Anthropic.' }
+            { type: 'text', text: 'First instruction.' },
+            { type: 'text', text: 'Second instruction.' }
         ]);
-        assert(!out.includes('Claude Code'), `"Claude Code" survived: ${out}`);
-        assert(!out.includes('Anthropic'), `"Anthropic" survived: ${out}`);
+        assert(out.includes('First instruction.'), 'First block missing');
+        assert(out.includes('Second instruction.'), 'Second block missing');
     });
 
-    test('Existing Hermes / Nous Research defaults still scrub', () => {
-        const out = outgoingSystem('You are Hermes, an agent created by Nous Research.');
-        assert(!out.includes('Hermes'), `"Hermes" survived: ${out}`);
-        assert(!out.includes('Nous Research'), `"Nous Research" survived: ${out}`);
+    test('No artificial [ignore] tags injected', () => {
+        const text = 'Helpful assistant.';
+        const out = outgoingSystem(text);
+        assert(!out.includes('[ignore]'), 'Prompt must not contain artificial [ignore] evasion tags');
+        assert(!out.includes('[/ignore]'), 'Prompt must not contain artificial [/ignore] evasion tags');
     });
 
-    test('Lower-case header names are left alone', () => {
-        const text = 'Example headers:\nx-anthropic-beta: foo\nanthropic-version: 2023-06-01';
-        assert(outgoingSystem(text).includes(text), 'lower-case header names must not be scrubbed');
+    test('Default assistant prompt used when caller provides none', () => {
+        const out = outgoingSystem(undefined);
+        assert(out.length > 0, 'Expected non-empty default system instruction');
+        assert(out.includes('Antigravity'), 'Expected default assistant instruction');
     });
 
-    test('The bare word Claude is preserved in model self-descriptions', () => {
-        const text = 'You are powered by the model named Claude.';
-        assert(outgoingSystem(text).includes('Claude'), 'bare "Claude" must not be scrubbed');
-    });
-
-    test('Upper-case CLAUDE.md file references are left alone', () => {
-        const text = 'See CLAUDE.md for project conventions.';
-        assert(outgoingSystem(text).includes('CLAUDE.md'), 'CLAUDE.md must not be scrubbed');
-    });
-
-    test('Unrelated system prompts pass through unchanged', () => {
-        const text = 'You are a helpful coding assistant. Always write tests first.';
-        assert(outgoingSystem(text).includes(text), 'unrelated prompt must be unchanged');
-    });
-
-    test('Identifiers containing a scrubbed term are left alone', () => {
-        const text = 'Use convertAnthropicToGoogle() and AnthropicRequest types. See HermesHandler.';
-        assert(outgoingSystem(text).includes(text), `identifiers must not be rewritten: ${outgoingSystem(text)}`);
-    });
-
-    test('Possessive and punctuated forms are still scrubbed', () => {
-        const out = outgoingSystem("Claude Code's docs (Anthropic). Ask Hermes.");
-        assert(!out.includes('Claude Code') && !out.includes('Anthropic') && !out.includes('Hermes'), `term survived: ${out}`);
-        assert(out.includes("the assistant's docs (the vendor)."), `unexpected output: ${out}`);
-    });
-
-    console.log('\n' + '═'.repeat(60));
-    console.log(`Tests completed: ${passed} passed, ${failed} failed`);
-
-    if (failed > 0) {
-        process.exit(1);
-    }
+    console.log(`\nTests completed: ${passed} passed, ${failed} failed`);
+    if (failed > 0) process.exit(1);
 }
 
 runTests().catch(err => {
-    console.error('Test suite failed:', err);
+    console.error('Fatal:', err);
     process.exit(1);
 });

@@ -43,6 +43,14 @@ A proxy server that exposes an **Anthropic-compatible API** backed by **Antigrav
 4. Sends to Antigravity's Cloud Code API
 5. Converts responses back to **Anthropic format** with full thinking/streaming support
 
+### Key Features & Official CLI Integration
+- **Official CLI Credentials**: Automatically detects and uses Google Antigravity CLI (`agy`) credentials from `~/.gemini/antigravity-cli/antigravity-oauth-token`.
+- **Automatic Token Lifecycle**: Seamlessly auto-refreshes OAuth access tokens against Google OAuth servers before expiry.
+- **Claude Desktop & Harness Compatibility**: Implements `/v1/api/hello`, `/v1/messages/count_tokens`, route aliases (`/messages`, `/models`), and URL normalization.
+- **Headless & ACP Provider**: Built-in support for official `agy` headless execution (`-p --output-format json` and stream-json) via `src/providers/agy-cli-provider.js`.
+- **Secure by Default**: Binds to `127.0.0.1` (loopback only) with `0600` credential file permissions to prevent LAN exposure.
+- **100% Offline Test Suite**: Self-contained mock upstream server for deterministic testing without consuming production quotas.
+
 ## Prerequisites
 
 - **Node.js** 18 or later
@@ -239,54 +247,120 @@ setx ANTHROPIC_AUTH_TOKEN "test"
 
 Restart your terminal for changes to take effect.
 
-### Run Claude Code
+### How to Test and Run with Claude Code
+
+The proxy exposes a fully compatible Anthropic Messages API (`/v1/messages`, `/v1/models`, `/v1/messages/count_tokens`) and automatically detects your Google Antigravity credentials.
+
+Follow these steps to connect **Claude Code CLI** to the proxy:
+
+#### Step 1: Start the Proxy Server
 
 ```bash
-# Make sure the proxy is running first
-antigravity-claude-proxy start
+# From this repository:
+npm start
 
-# In another terminal, run Claude Code
+# Or if installed globally / via npx:
+antigravity-claude-proxy start
+```
+
+The server binds securely to `127.0.0.1:8080` (loopback only) and automatically extracts credentials from `~/.gemini/antigravity-cli/antigravity-oauth-token` (or your configured accounts):
+
+```text
+[AccountManager] Loaded default account from official CLI token: ...
+[AccountManager] Using Hybrid selection strategy
+[Startup] Proxy running on http://127.0.0.1:8080
+```
+
+#### Step 2: Quick Connectivity Sanity Check (Optional)
+
+In another terminal, test that the proxy is responding:
+
+```bash
+curl http://127.0.0.1:8080/v1/api/hello
+# Output: {"status":"ok"}
+
+curl http://127.0.0.1:8080/v1/models
+# Output: {"object":"list","data":[{"id":"claude-sonnet-4-6",...}]}
+```
+
+#### Step 3: Launch Claude Code Connected to the Proxy
+
+Run `claude` with the proxy environment variables. We recommend setting `CLAUDE_CONFIG_DIR=~/.claude-antigravity` so your proxy session is completely isolated from your official Anthropic account:
+
+```bash
+CLAUDE_CONFIG_DIR=~/.claude-antigravity \
+ANTHROPIC_BASE_URL="http://127.0.0.1:8080" \
+ANTHROPIC_AUTH_TOKEN="test" \
+ANTHROPIC_MODEL="claude-sonnet-4-6" \
 claude
 ```
 
-> **Note:** If Claude Code asks you to select a login method, add `"hasCompletedOnboarding": true` to `~/.claude.json` (macOS/Linux) or `%USERPROFILE%\.claude.json` (Windows), then restart your terminal and try again.
+#### Step 4: First-Time Onboarding Setup (If Prompted)
 
-### Proxy Mode vs. Paid Mode
-
-Toggle in **Settings** → **Claude CLI**:
-
-| Feature | 🔌 Proxy Mode | 💳 Paid Mode |
-| :--- | :--- | :--- |
-| **Backend** | Local Server (Antigravity) | Official Anthropic Credits |
-| **Cost** | Free (Google Cloud) | Paid (Anthropic Credits) |
-| **Models** | Claude + Gemini | Claude Only |
-
-**Paid Mode** automatically clears proxy settings so you can use your official Anthropic account directly.
-
-### Multiple Claude Code Instances (Optional)
-
-To run both the official Claude Code and Antigravity version simultaneously, add this alias:
+If Claude Code asks you to select an authentication method or sign in through a browser, cancel with `Ctrl+C` and bypass the onboarding check for this isolated directory:
 
 **macOS / Linux:**
-
 ```bash
-# Add to ~/.zshrc or ~/.bashrc
-alias claude-antigravity='CLAUDE_CONFIG_DIR=~/.claude-account-antigravity ANTHROPIC_BASE_URL="http://localhost:8080" ANTHROPIC_AUTH_TOKEN="test" command claude'
+mkdir -p ~/.claude-antigravity
+echo '{"hasCompletedOnboarding": true}' > ~/.claude-antigravity/config.json
 ```
 
 **Windows (PowerShell):**
-
 ```powershell
-# Add to $PROFILE
-function claude-antigravity {
-    $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-account-antigravity"
-    $env:ANTHROPIC_BASE_URL = "http://localhost:8080"
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude-antigravity"
+Set-Content -Path "$env:USERPROFILE\.claude-antigravity\config.json" -Value '{"hasCompletedOnboarding": true}'
+```
+
+#### Step 5: Test Model Reasoning & Tool Execution
+
+Once Claude Code starts:
+1. **Chat & Coding**: Ask a coding question or explain a file in the workspace:
+   ```text
+   > Read package.json and summarize the available npm scripts.
+   ```
+2. **Verify Streaming in Proxy**: In the proxy server window, you will see real-time streaming requests:
+   ```text
+   [POST] /v1/messages 200 (120ms)
+   ```
+3. **Extended Thinking Mode**: To test Claude with deep reasoning / thinking:
+   ```bash
+   CLAUDE_CONFIG_DIR=~/.claude-antigravity \
+   ANTHROPIC_BASE_URL="http://127.0.0.1:8080" \
+   ANTHROPIC_AUTH_TOKEN="test" \
+   ANTHROPIC_MODEL="claude-opus-4-6-thinking" \
+   claude
+   ```
+
+#### Step 6: Create Shell Aliases for Daily Use (Recommended)
+
+Add these aliases to your `~/.zshrc` (or `~/.bashrc`) to run Claude Code with Antigravity anytime:
+
+```bash
+# Standard Sonnet 3.7
+alias claude-agy='CLAUDE_CONFIG_DIR=~/.claude-antigravity ANTHROPIC_BASE_URL="http://127.0.0.1:8080" ANTHROPIC_AUTH_TOKEN="test" ANTHROPIC_MODEL="claude-sonnet-4-6" claude'
+
+# Opus 3.7 with Thinking enabled
+alias claude-thinking='CLAUDE_CONFIG_DIR=~/.claude-antigravity ANTHROPIC_BASE_URL="http://127.0.0.1:8080" ANTHROPIC_AUTH_TOKEN="test" ANTHROPIC_MODEL="claude-opus-4-6-thinking" claude'
+```
+
+Then reload your shell:
+```bash
+source ~/.zshrc
+claude-agy
+```
+
+**Windows (PowerShell `$PROFILE`):**
+```powershell
+function claude-agy {
+    $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-antigravity"
+    $env:ANTHROPIC_BASE_URL = "http://127.0.0.1:8080"
     $env:ANTHROPIC_AUTH_TOKEN = "test"
+    $env:ANTHROPIC_MODEL = "claude-sonnet-4-6"
     claude
 }
 ```
 
-Then run `claude` for official API or `claude-antigravity` for this proxy.
+---
 
 ### Running as a System Service (systemd)
 
