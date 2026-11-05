@@ -82,7 +82,15 @@ export class HybridStrategy extends BaseStrategy {
             score: this.#calculateScore(account, modelId)
         }));
 
-        scored.sort((a, b) => b.score - a.score);
+        // Prefer idle (non-busy) accounts over currently active accounts to maximize concurrency
+        scored.sort((a, b) => {
+            if (options.isAccountBusy) {
+                const aBusy = options.isAccountBusy(a.account.email) ? 1 : 0;
+                const bBusy = options.isAccountBusy(b.account.email) ? 1 : 0;
+                if (aBusy !== bBusy) return aBusy - bBusy;
+            }
+            return b.score - a.score;
+        });
 
         // Select the best candidate
         const best = scored[0];

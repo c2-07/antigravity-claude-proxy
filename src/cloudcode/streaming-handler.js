@@ -136,7 +136,12 @@ export async function* sendMessageStream(anthropicRequest, accountManager, fallb
             continue;
         }
 
+        let releaseLock = null;
         try {
+            if (accountManager.acquireLock) {
+                releaseLock = await accountManager.acquireLock(account.email);
+            }
+
             // Get token and project for this account
             const token = await accountManager.getTokenForAccount(account);
             const project = await accountManager.getProjectForAccount(account, token);
@@ -484,6 +489,10 @@ export async function* sendMessageStream(anthropicRequest, accountManager, fallb
             }
 
             throw error;
+        } finally {
+            if (releaseLock) {
+                releaseLock();
+            }
         }
     }
 

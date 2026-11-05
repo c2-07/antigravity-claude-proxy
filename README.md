@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/antigravity-claude-proxy.svg)](https://www.npmjs.com/package/antigravity-claude-proxy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A lightweight compatibility proxy that exposes an **Anthropic Messages API** backed by **Google Antigravity Cloud Code**, letting you use Claude and Gemini models seamlessly in **Claude Code CLI**, **Claude Desktop (Cowork & Chat)**, and **OpenClaw / ClawdBot**.
+A lightweight compatibility proxy that exposes an **Anthropic Messages API** backed by **Google Antigravity Cloud Code**, letting you use Claude and Gemini models seamlessly in **Claude Code CLI** and **OpenClaw / ClawdBot**.
 
 > **WARNING:** Google may flag or suspend accounts connected to unauthorized reverse-engineered proxies. Use a dedicated burner or secondary account.
 
@@ -26,12 +26,12 @@ A lightweight compatibility proxy that exposes an **Anthropic Messages API** bac
 - [Key Features](#key-features)
 - [Quick Start in 60 Seconds](#quick-start-in-60-seconds)
 - [Using with Claude Code CLI](#using-with-claude-code-cli)
-- [Using with Claude Desktop (Cowork & Chat)](#using-with-claude-desktop-cowork--chat)
 - [Using Gemini Flash](#using-gemini-flash)
 - [Available Models & Routing](#available-models--routing)
 - [Account Management & Web UI](#account-management--web-ui)
 - [Running as a System Service (systemd)](#running-as-a-system-service-systemd)
 - [Documentation & Testing](#documentation--testing)
+- [Fork Information & Added Features](#fork-information--added-features)
 
 ---
 
@@ -40,8 +40,8 @@ A lightweight compatibility proxy that exposes an **Anthropic Messages API** bac
 ```
 ┌────────────────────────┐      ┌─────────────────────────┐      ┌───────────────────────────┐
 │  Claude Code CLI       │─────▶│  Antigravity Proxy      │─────▶│  Google Antigravity       │
-│  or Claude Desktop     │◀─────│  (127.0.0.1:8080)       │◀─────│  Cloud Code Backend       │
-│  (Anthropic API shape) │      │  Anthropic ⇄ Google AI  │      │  (daily-cloudcode-pa/prod)│
+│  or OpenClaw / ClawdBot│◀─────│  (127.0.0.1:8080)       │◀─────│  Cloud Code Backend       │
+│  (Anthropic API shape) │      │  Anthropic ⇄ Google AI  │      │  (cloudcode-pa / prod)    │
 └────────────────────────┘      └─────────────────────────┘      └───────────────────────────┘
 ```
 
@@ -55,8 +55,8 @@ A lightweight compatibility proxy that exposes an **Anthropic Messages API** bac
 ## Key Features
 
 - **Zero-Config Token Extraction**: Automatically detects and uses official Google Antigravity CLI (`agy`) OAuth credentials and auto-refreshes expired access tokens.
-- **Claude Desktop Gateway Ready**: Implements health probes (`/v1/api/hello`), token counter (`/v1/messages/count_tokens`), and Anthropic tier metadata (`anthropic_family_tier`) so models appear directly in Claude Desktop's UI.
-- **Gemini Flash Full Compatibility**: Exposes Anthropic-compliant Haiku aliases (`claude-3-5-haiku-20241022` & `claude-haiku-4-5-20251001`) that bypass Claude Desktop's internal vendor filter and route straight to Gemini 3.8 Flash with thinking and vision.
+- **Claude Code Optimized**: Automatically filters out `Artifact` tool calls and formats events for seamless execution in the Claude Code CLI.
+- **Gemini Flash Full Compatibility**: Exposes native Anthropic Haiku aliases (`claude-haiku-5-5`) that map to Gemini 3.8 Flash High with thinking and vision, completely avoiding model recognition warnings.
 - **Multi-Account Load Balancing**: Intelligent round-robin, sticky session, and hybrid strategies to distribute requests across accounts and maximize quota availability.
 - **Built-in agy CLI Provider**: Supports official `agy` headless execution (`-p --output-format json` and `stream-json`) via `src/providers/agy-cli-provider.js`.
 - **Security-First Architecture**: Binds strictly to `127.0.0.1` (loopback only) by default, stores tokens with restrictive `0600` permissions, and redacts sensitive tokens in all logs.
@@ -176,56 +176,73 @@ claude-agy
 
 ---
 
-## Using with Claude Desktop (Cowork & Chat)
+## Using Gemini Flash in Claude Code CLI
 
-Claude Desktop includes native support for connecting to a local or remote **LLM Gateway**.
+To run Gemini 3.8 Flash High with zero warnings in Claude Code CLI, use the alias `claude-haiku-5-5`:
 
-### Step 1: Connect Claude Desktop to Gateway
+### Fish Shell
+```fish
+set -e ANTHROPIC_API_KEY
+set -e -U ANTHROPIC_API_KEY 2>/dev/null
+set -gx ANTHROPIC_BASE_URL "http://127.0.0.1:8080"
+set -gx ANTHROPIC_AUTH_TOKEN "test"
+set -gx ANTHROPIC_MODEL "claude-haiku-5-5"
+claude
+```
 
-1. Open **Claude Desktop**.
-2. Go to **Settings** &rarr; **Account** / **Developer** (or your Gateway connection configuration).
-3. Set the **Inference Provider** / **Base URL** to:
-   ```text
-   http://127.0.0.1:8080
-   ```
-4. Set Auth Token / API Key to any dummy value (e.g. `test`).
-5. Save and restart Claude Desktop. The bottom-left account indicator will show `Gateway`.
+### Bash / Zsh
+```bash
+unset ANTHROPIC_API_KEY
+export ANTHROPIC_BASE_URL="http://127.0.0.1:8080"
+export ANTHROPIC_AUTH_TOKEN="test"
+export ANTHROPIC_MODEL="claude-haiku-5-5"
+claude
+```
 
-### Step 2: Select Your Model
-
-When chatting or using **Cowork** in Claude Desktop:
-
-1. Click the model dropdown at the bottom right of the chat input.
-2. Select your desired model:
-   - **`Sonnet 4.6`** &rarr; Standard high-capability model (`claude-sonnet-4-6`)
-   - **`Claude Opus 4.6 (Thinking)`** &rarr; Deep reasoning Opus model (`claude-opus-4-6-thinking`)
-   - **`Gemini 3.8 Flash (Haiku)`** &rarr; Google's fast, multimodal Gemini 3.8 Flash reasoning model
+The proxy maps `claude-haiku-5-5` directly to `gemini-3.8-flash-high` with full thinking blocks and reasoning.
 
 ---
 
-## Using Gemini Flash
+## Avoiding Quota Exhaustion (`RESOURCE_EXHAUSTED`)
 
-### In Claude Desktop
+Google's backend enforces distinct quota pools:
+- **Sonnet / Opus models**: Stricter daily/hourly rate limits.
+- **Gemini Flash (`gemini-3.8-flash-high` / `claude-haiku-5-5`)**: High throughput, large context window, and significantly higher quota.
 
-Claude Desktop enforces an internal vendor blocklist in `/Applications/Claude.app/Contents/Resources/app.asar` that drops model IDs containing `gemini` or non-Anthropic identifiers.
+**Recommended Actions:**
+1. Use **`claude-haiku-5-5`** for coding tasks to take advantage of Flash's higher quota limits.
+2. Add multiple Google accounts to pool quotas:
+   ```bash
+   npm run accounts
+   ```
+3. Enable automatic fallback on the proxy:
+   ```bash
+   node src/index.js start --fallback
+   ```
+   When enabled, if Sonnet hits a rate limit, the proxy automatically routes the prompt to Gemini Flash seamlessly.
 
-To solve this, `antigravity-claude-proxy` provides official Anthropic Haiku aliases:
-- **`claude-3-5-haiku-20241022`** (Display: **`Gemini 3.8 Flash (Haiku)`**)
-- **`claude-haiku-4-5-20251001`** (Display: **`Gemini 3.8 Flash (Haiku 4.5)`**)
+---
 
-Simply choose **`Gemini 3.8 Flash (Haiku)`** from the model dropdown in Claude Desktop. The proxy intercepts the request and routes it to `gemini-3.8-flash-high` with full thinking and multimodal vision capabilities.
+## Claude Code Artifact Handling
 
-### In Claude Code CLI
-
-Claude Code CLI has no UI blocklist, so you can specify the model directly:
-
-```bash
-CLAUDE_CONFIG_DIR=~/.claude-antigravity \
-ANTHROPIC_BASE_URL="http://127.0.0.1:8080" \
-ANTHROPIC_AUTH_TOKEN="test" \
-ANTHROPIC_MODEL="gemini-3.8-flash-high" \
-claude
+When Claude Code generates HTML or UI files (e.g., interactive web apps), Claude may attempt to call its built-in `Artifact` tool to publish previews to `claude.ai`. In API/Gateway mode, this causes:
+```text
+Error: Artifacts need a claude.ai login, and this session is authenticating with the ANTHROPIC_API_KEY...
 ```
+
+**Resolution:**
+1. **The file is already saved:** Claude Code writes the file directly to your disk before attempting to call `Artifact`. You can open and use your file immediately (e.g. `open tetris.html`).
+2. **Automatic Proxy Filtering:** The proxy automatically filters out the `Artifact` tool definition so the model writes files directly using local filesystem tools without triggering the error.
+3. **CLI Disallow Flag (Optional):** You can also instruct Claude Code to skip Artifacts:
+   ```bash
+   claude --disallowedTools Artifact
+   ```
+   Or add to `~/.claude/settings.json` (or `~/.claude-antigravity/settings.json`):
+   ```json
+   {
+     "disallowedTools": ["Artifact"]
+   }
+   ```
 
 ---
 
@@ -233,11 +250,11 @@ claude
 
 | Model Name / ID | Family | Thinking / Reasoning | Best For |
 | :--- | :--- | :---: | :--- |
+| `claude-haiku-5-5` | Gemini (Alias) | Yes | **Claude Code CLI fast reasoning model** &rarr; maps to `gemini-3.8-flash-high` |
 | `claude-sonnet-4-6` | Claude | Yes | Everyday coding, multi-turn tool loops, agent tasks |
 | `claude-opus-4-6-thinking` | Claude | Yes (Deep) | Complex architecture, difficult debugging, high-effort reasoning |
 | `gemini-3.8-flash-high` | Gemini | Yes | Fast coding, large context, multimodal vision, subagents |
-| `claude-3-5-haiku-20241022` | Gemini (Alias) | Yes | **Claude Desktop alias** mapping to `gemini-3.8-flash-high` |
-| `claude-haiku-4-5-20251001` | Gemini (Alias) | Yes | **Claude Desktop alias** mapping to `gemini-3.8-flash-high` |
+| `claude-haiku-4-5-20251001` | Gemini (Alias) | Yes | **Haiku 4.5 alias** mapping to `gemini-3.8-flash-high` |
 | `gemini-3.5-flash-lite` | Gemini | No | Ultra-fast lightweight completions and quick summaries |
 
 ---
@@ -304,6 +321,21 @@ WantedBy=multi-user.target
 This project builds upon insights and foundations from:
 - [opencode-antigravity-auth](https://github.com/NoeFabris/opencode-antigravity-auth)
 - [claude-code-proxy](https://github.com/1rgs/claude-code-proxy)
+
+---
+
+## Fork Information & Added Features
+
+This repository is forked from [badrisnarayanan/antigravity-claude-proxy](https://github.com/badrisnarayanan/antigravity-claude-proxy).
+
+### Key Additions & Enhancements:
+- **Claude Code CLI Optimization & Artifact Fix**: Filtered out unsupported `Artifact` tool calls that trigger `claude.ai login` errors in Claude Code CLI.
+- **Gemini Flash Reasoning (`claude-haiku-5-5`)**: Added Anthropic-compatible Haiku aliases routing directly to `gemini-3.8-flash-high`, enabling zero-warning execution in Claude Code CLI.
+- **Per-Account Request Mutex (`AccountMutex`)**: Implemented FIFO request queuing per account to serialize upstream calls and prevent HTTP 429 `RESOURCE_EXHAUSTED` concurrency collisions on Google Cloud Code.
+- **Production Endpoint Priority**: Updated fallback endpoints to prioritize `cloudcode-pa.googleapis.com` (production) over canary/staging endpoints.
+- **Model Regex Truncation Fix**: Fixed model name regex parsing in error handlers to prevent dotted model IDs (like `gemini-3.8-flash-high`) from being truncated to `gemini-3`.
+- **Stream Lifecycle Cleanup**: Added client socket close detection (`req.on('close')`) to safely cancel generators and immediately release account locks upon disconnection.
+- **Automated Test Coverage**: Added dedicated test suites for the account mutex (`tests/test-account-mutex.cjs`) and updated model routing/usage test suites.
 
 ---
 

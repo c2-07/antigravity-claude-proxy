@@ -115,21 +115,22 @@ export async function listModels(token) {
         }));
 
     // Inject Anthropic-compatible Haiku aliases for Gemini Flash.
-    // Claude Desktop uses an internal vendor blocklist that hides non-Anthropic model IDs (like "gemini-*").
-    // Adding these aliases allows Claude Desktop's UI to expose and route to Gemini Flash cleanly.
+    // Claude Code CLI checks model IDs against Anthropic's registry and warns on non-Anthropic IDs.
+    // Exposing these aliases allows Claude Code CLI to run with zero warnings.
     const hasFlash = supportedEntries.some(([id]) => id.includes('flash'));
     if (hasFlash) {
         modelList.push({
-            id: 'claude-3-5-haiku-20241022',
+            id: 'claude-haiku-5-5',
             object: 'model',
             type: 'model',
             created: Math.floor(Date.now() / 1000),
             created_at: new Date().toISOString(),
             owned_by: 'anthropic',
-            display_name: 'Gemini 3.8 Flash (Haiku)',
-            name: 'Gemini 3.8 Flash (Haiku)',
+            display_name: 'Gemini 3.8 Flash (Haiku 5.5)',
+            name: 'Gemini 3.8 Flash (Haiku 5.5)',
             description: 'Gemini 3.8 Flash high-performance reasoning model',
             anthropic_family_tier: 'haiku',
+            is_family_default: true,
             max_effort_level: 'high'
         });
         modelList.push({
@@ -145,8 +146,9 @@ export async function listModels(token) {
             anthropic_family_tier: 'haiku',
             max_effort_level: 'high'
         });
-        modelCache.validModels.add('claude-3-5-haiku-20241022');
+        modelCache.validModels.add('claude-haiku-5-5');
         modelCache.validModels.add('claude-haiku-4-5-20251001');
+        modelCache.validModels.add('claude-3-5-haiku-20241022');
     }
 
     return {

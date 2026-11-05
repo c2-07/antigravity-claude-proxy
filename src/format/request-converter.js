@@ -227,48 +227,56 @@ export function convertAnthropicToGoogle(anthropicRequest) {
 
     // Convert tools to Google format
     if (tools && tools.length > 0) {
-        const functionDeclarations = tools.map((tool, idx) => {
-            // Extract name from various possible locations
-            const name = tool.name || tool.function?.name || tool.custom?.name || `tool-${idx}`;
-
-            // Extract description from various possible locations
-            const description = tool.description || tool.function?.description || tool.custom?.description || '';
-
-            // Extract schema from various possible locations
-            const schema = tool.input_schema
-                || tool.function?.input_schema
-                || tool.function?.parameters
-                || tool.custom?.input_schema
-                || tool.parameters
-                || { type: 'object' };
-
-            // Sanitize schema for general compatibility
-            let parameters = sanitizeSchema(schema);
-
-            // Apply Google-format cleaning for ALL models since they all go through
-            // Cloud Code API which validates schemas using Google's protobuf format.
-            // This fixes issue #82: /compact command fails with schema transformation error
-            // "Proto field is not repeating, cannot start list" for Claude models.
-            parameters = cleanSchema(parameters);
-
-            return {
-                name: String(name).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64),
-                description: description,
-                parameters
-            };
+        // Filter out client-side web tools that fail when running via API / Gateway (e.g. Artifact tool)
+        const usableTools = tools.filter(tool => {
+            const name = tool.name || tool.function?.name || tool.custom?.name || '';
+            return name !== 'Artifact';
         });
 
-        googleRequest.tools = [{ functionDeclarations }];
-        logger.debug(`[RequestConverter] Tools: ${JSON.stringify(googleRequest.tools).substring(0, 300)}`);
+        if (usableTools.length > 0) {
+            const functionDeclarations = usableTools.map((tool, idx) => {
+                // Extract name from various possible locations
+                const name = tool.name || tool.function?.name || tool.custom?.name || `tool-${idx}`;
 
-        // For Claude models, set functionCallingConfig.mode = "VALIDATED"
-        // This ensures strict parameter validation (matches opencode-antigravity-auth)
-        if (isClaudeModel) {
-            googleRequest.toolConfig = {
-                functionCallingConfig: {
-                    mode: 'VALIDATED'
-                }
-            };
+                // Extract description from various possible locations
+                const description = tool.description || tool.function?.description || tool.custom?.description || '';
+
+                // Extract schema from various possible locations
+                const schema = tool.input_schema
+                    || tool.function?.input_schema
+                    || tool.function?.parameters
+                    || tool.custom?.input_schema
+                    || tool.parameters
+                    || { type: 'object' };
+
+                // Sanitize schema for general compatibility
+                let parameters = sanitizeSchema(schema);
+
+                // Apply Google-format cleaning for ALL models since they all go through
+                // Cloud Code API which validates schemas using Google's protobuf format.
+                // This fixes issue #82: /compact command fails with schema transformation error
+                // "Proto field is not repeating, cannot start list" for Claude models.
+                parameters = cleanSchema(parameters);
+
+                return {
+                    name: String(name).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64),
+                    description: description,
+                    parameters
+                };
+            });
+
+            googleRequest.tools = [{ functionDeclarations }];
+            logger.debug(`[RequestConverter] Tools: ${JSON.stringify(googleRequest.tools).substring(0, 300)}`);
+
+            // For Claude models, set functionCallingConfig.mode = "VALIDATED"
+            // This ensures strict parameter validation (matches opencode-antigravity-auth)
+            if (isClaudeModel) {
+                googleRequest.toolConfig = {
+                    functionCallingConfig: {
+                        mode: 'VALIDATED'
+                    }
+                };
+            }
         }
     }
 

@@ -139,8 +139,8 @@ async function runTests() {
     await test('/v1/models lists Gemini, Claude and the codename agent model (with Haiku aliases)', () => {
         assertEqual(listedIds, [
             CODENAME,
-            'claude-3-5-haiku-20241022',
             'claude-haiku-4-5-20251001',
+            'claude-haiku-5-5',
             'claude-sonnet-5-5-low',
             'gemini-3.8-flash-tiered'
         ].sort());

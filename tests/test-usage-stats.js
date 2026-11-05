@@ -73,7 +73,7 @@ async function testUsageStats() {
     // 4. Built-in model mappings check
     assert.strictEqual(BUILTIN_MODEL_MAPPINGS['claude-opus-5-5'], 'claude-opus-4-6-thinking');
     assert.strictEqual(BUILTIN_MODEL_MAPPINGS['claude-sonnet-5-5'], 'claude-sonnet-4-6');
-    assert.strictEqual(BUILTIN_MODEL_MAPPINGS['claude-haiku-5-5'], 'claude-sonnet-4-6');
+    assert.strictEqual(BUILTIN_MODEL_MAPPINGS['claude-haiku-5-5'], 'gemini-3.8-flash-high');
     assert.strictEqual(BUILTIN_MODEL_MAPPINGS['claude-3-5-sonnet-20241022'], 'claude-sonnet-4-6');
     console.log('✓ Built-in model mappings: OK');
 

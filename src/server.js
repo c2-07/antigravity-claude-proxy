@@ -169,7 +169,10 @@ function parseError(error) {
         // Try to extract the quota reset time from the error
         const resetMatch = error.message.match(/quota will reset after ([\dh\dm\ds]+)/i);
         // Try to extract model from our error format "Rate limited on <model>" or JSON format
-        const modelMatch = error.message.match(/Rate limited on ([^.]+)\./) || error.message.match(/"model":\s*"([^"]+)"/);
+        // Handle dotted model identifiers (e.g. gemini-3.8-flash-high) without premature truncation
+        const modelMatch = error.message.match(/Rate limited on ([^\n\r]+?)\.\s*Quota will reset/i) ||
+            error.message.match(/Rate limited on ([^\s.]+?(?:\.[^\s.]+)*)\./) ||
+            error.message.match(/"model":\s*"([^"]+)"/);
         const model = modelMatch ? modelMatch[1] : 'the model';
 
         if (resetMatch) {
@@ -870,9 +873,17 @@ app.post(['/messages', '/v1/messages'], async (req, res) => {
             // Do NOT flush headers immediately. We need to wait for the first chunk
             // to ensure we don't send a 200 OK if the upstream fails immediately (e.g. 429/503).
 
+            let generator = null;
+            const onClose = () => {
+                if (!res.writableEnded && generator?.return) {
+                    generator.return().catch(() => {});
+                }
+            };
+            req.on('close', onClose);
+
             try {
                 // Initialize the generator
-                const generator = sendMessageStream(request, accountManager, FALLBACK_ENABLED);
+                generator = sendMessageStream(request, accountManager, FALLBACK_ENABLED);
                 
                 // BUFFERING STRATEGY:
                 // Pull the first event *before* sending headers. 
@@ -927,6 +938,8 @@ app.post(['/messages', '/v1/messages'], async (req, res) => {
                     error: { type: errorType, message: errorMessage }
                 })}\n\n`);
                 res.end();
+            } finally {
+                req.removeListener('close', onClose);
             }
 
         } else {

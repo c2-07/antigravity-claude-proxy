@@ -34,6 +34,7 @@ import {
     clearTokenCache as clearToken
 } from './credentials.js';
 import { createStrategy, getStrategyLabel, DEFAULT_STRATEGY } from './strategies/index.js';
+import { AccountMutex } from './mutex.js';
 import { logger } from '../utils/logger.js';
 
 export class AccountManager {
@@ -48,6 +49,7 @@ export class AccountManager {
     // Per-account caches
     #tokenCache = new Map(); // email -> { token, extractedAt }
     #projectCache = new Map(); // email -> projectId
+    #accountLocks = new Map(); // email -> AccountMutex
 
     constructor(configPath = ACCOUNT_CONFIG_PATH, strategyName = null) {
         this.#configPath = configPath;
@@ -185,11 +187,49 @@ export class AccountManager {
         const result = this.#strategy.selectAccount(this.#accounts, modelId, {
             currentIndex: this.#currentIndex,
             onSave: () => this.saveToDisk(),
+            isAccountBusy: (email) => this.isAccountBusy(email),
             ...options
         });
 
         this.#currentIndex = result.index;
         return { account: result.account, waitMs: result.waitMs || 0 };
+    }
+
+    /**
+     * Get or create mutex for an account email.
+     * @param {string} email
+     * @returns {AccountMutex}
+     */
+    getMutex(email) {
+        if (!this.#accountLocks.has(email)) {
+            this.#accountLocks.set(email, new AccountMutex());
+        }
+        return this.#accountLocks.get(email);
+    }
+
+    /**
+     * Acquire concurrency lock for an account.
+     * Prevents concurrent overlapping requests on upstream providers that
+     * return 429 when multiple requests run simultaneously on the same token.
+     * @param {string} email
+     * @param {number} [timeoutMs=60000]
+     * @returns {Promise<() => void>} Release function
+     */
+    async acquireLock(email, timeoutMs = 60000) {
+        if (!email) return () => {};
+        const mutex = this.getMutex(email);
+        return await mutex.acquire(timeoutMs);
+    }
+
+    /**
+     * Check if an account currently has an in-flight request.
+     * @param {string} email
+     * @returns {boolean}
+     */
+    isAccountBusy(email) {
+        if (!email) return false;
+        const mutex = this.#accountLocks.get(email);
+        return mutex ? mutex.isLocked() : false;
     }
 
     /**
